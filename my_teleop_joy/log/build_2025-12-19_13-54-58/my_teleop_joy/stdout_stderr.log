@@ -1,0 +1,28 @@
+running develop
+running egg_info
+creating my_teleop_joy.egg-info
+writing my_teleop_joy.egg-info/PKG-INFO
+writing dependency_links to my_teleop_joy.egg-info/dependency_links.txt
+writing entry points to my_teleop_joy.egg-info/entry_points.txt
+writing requirements to my_teleop_joy.egg-info/requires.txt
+writing top-level names to my_teleop_joy.egg-info/top_level.txt
+writing manifest file 'my_teleop_joy.egg-info/SOURCES.txt'
+reading manifest file 'my_teleop_joy.egg-info/SOURCES.txt'
+writing manifest file 'my_teleop_joy.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/lib/python3.10/site-packages/my-teleop-joy.egg-link (link to .)
+Installing my_teleop_joy_node script to /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/lib/my_teleop_joy
+
+Installed /home/sarah/robmob_ws/src/my_teleop_joy/build/my_teleop_joy
+running symlink_data
+creating /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/ament_index
+creating /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/ament_index/resource_index
+creating /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/ament_index/resource_index/packages
+symbolically linking /home/sarah/robmob_ws/src/my_teleop_joy/build/my_teleop_joy/resource/my_teleop_joy -> /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/ament_index/resource_index/packages
+symbolically linking /home/sarah/robmob_ws/src/my_teleop_joy/build/my_teleop_joy/package.xml -> /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/my_teleop_joy
+creating /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/my_teleop_joy/launch
+symbolically linking /home/sarah/robmob_ws/src/my_teleop_joy/build/my_teleop_joy/launch/launch_joy.py -> /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/my_teleop_joy/launch
+creating /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/my_teleop_joy/rviz
+symbolically linking /home/sarah/robmob_ws/src/my_teleop_joy/build/my_teleop_joy/rviz/turtlebot_config.rviz -> /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/my_teleop_joy/rviz
+symbolically linking /home/sarah/robmob_ws/src/my_teleop_joy/build/my_teleop_joy/launch/rviz_launch.py -> /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/my_teleop_joy/launch
+symbolically linking /home/sarah/robmob_ws/src/my_teleop_joy/build/my_teleop_joy/launch/inflate_map.launch.py -> /home/sarah/robmob_ws/src/my_teleop_joy/install/my_teleop_joy/share/my_teleop_joy/launch

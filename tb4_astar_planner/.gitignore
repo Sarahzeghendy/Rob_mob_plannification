@@ -1,0 +1,24 @@
+cat > .gitignore <<'EOF'
+# ROS2 / colcon
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Gazebo / RViz caches (optionnel)
+*.db
+EOF
