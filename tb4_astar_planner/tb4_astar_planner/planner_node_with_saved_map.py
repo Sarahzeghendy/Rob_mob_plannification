@@ -2,20 +2,23 @@
 """
 Planificateur A* qui utilise une carte sauvegardée
 Charge une carte depuis un fichier YAML/PGM au lieu d'attendre le topic /map
+Avec localisation manuelle (publie le TF map->odom)
 """
 
 import math
 import numpy as np
 import yaml
 from PIL import Image
+import os
 
 import rclpy
 from rclpy.node import Node
 
 from nav_msgs.msg import OccupancyGrid, Path
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist, TransformStamped
 
 import tf2_ros
+from tf2_ros import TransformBroadcaster
 
 from .map_utils import occgrid_to_2d, inflate_occupancy, world_to_cell, cell_to_world
 from .astar import astar_occ_grid
@@ -28,11 +31,21 @@ def yaw_from_quat(q):
     return math.atan2(siny_cosp, cosy_cosp)
 
 
+def quat_from_yaw(yaw):
+    """Convertir un angle yaw en quaternion"""
+    return {
+        'x': 0.0,
+        'y': 0.0,
+        'z': math.sin(yaw / 2.0),
+        'w': math.cos(yaw / 2.0)
+    }
+
+
 class AStarPlannerWithSavedMap(Node):
     def __init__(self):
-        super().__init__("tb4_astar_planner_saved_map")
+        super().__init__("tb4_astar_planner")
 
-        self.declare_parameter("map_yaml_path", "")  # Chemin vers le fichier .yaml de la carte
+        self.declare_parameter("map_yaml_path", "")  
         self.declare_parameter("use_topic_map", False)  
         
         self.declare_parameter("map_topic", "/map")
@@ -40,7 +53,7 @@ class AStarPlannerWithSavedMap(Node):
         self.declare_parameter("goal_topic", "/goal_pose")
         self.declare_parameter("path_topic", "/astar_path")
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
-        self.declare_parameter("publish_map", True)  # Publier la carte chargée
+        self.declare_parameter("publish_map", True)  
 
         self.declare_parameter("robot_radius_m", 0.20)
         self.declare_parameter("occ_thresh", 50)
@@ -49,9 +62,9 @@ class AStarPlannerWithSavedMap(Node):
 
         self.declare_parameter("global_frame", "map")
         self.declare_parameter("base_frame", "base_link")
+        self.declare_parameter("odom_frame", "odom")  
         self.declare_parameter("auto_use_robot_pose", True)
 
-        # Paramètres du contrôleur
         self.declare_parameter("lookahead_m", 0.30)
         self.declare_parameter("v_max", 0.20)
         self.declare_parameter("w_max", 1.2)
@@ -61,11 +74,9 @@ class AStarPlannerWithSavedMap(Node):
         self.path_pub = self.create_publisher(Path, self.get_parameter("path_topic").value, 10)
         self.cmd_pub = self.create_publisher(Twist, self.get_parameter("cmd_vel_topic").value, 10)
         
-        # Publisher pour la carte
         if self.get_parameter("publish_map").value:
             self.map_pub = self.create_publisher(OccupancyGrid, "/map_static", 10)
 
-        # Subscribers
         self.init_sub = self.create_subscription(
             PoseWithCovarianceStamped,
             self.get_parameter("initialpose_topic").value,
@@ -79,7 +90,6 @@ class AStarPlannerWithSavedMap(Node):
             10
         )
         
-        # écouter le topic /map
         if self.get_parameter("use_topic_map").value:
             self.map_sub = self.create_subscription(
                 OccupancyGrid,
@@ -88,11 +98,18 @@ class AStarPlannerWithSavedMap(Node):
                 10
             )
 
-        # TF
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        
+        self.tf_broadcaster = TransformBroadcaster(self)
+        
+        self.map_to_odom_x = 0.0
+        self.map_to_odom_y = 0.0
+        self.map_to_odom_yaw = 0.0
+        self.map_to_odom_initialized = False
+        
+        self.tf_timer = self.create_timer(0.05, self.publish_map_to_odom_tf)  
 
-        # État
         self.map_msg = None
         self.occ_2d = None
         self.inflated_2d = None
@@ -103,17 +120,14 @@ class AStarPlannerWithSavedMap(Node):
         self.path_world = []
         self.path_idx = 0
 
-        # Timer pour le contrôle
         self.timer = self.create_timer(0.05, self.on_control)
         
-        # Timer pour publier la carte
         if self.get_parameter("publish_map").value:
             self.map_pub_timer = self.create_timer(1.0, self.publish_loaded_map)
 
-        self.get_logger().info("="*60)
         self.get_logger().info("A* Planner with Saved Map started!")
+        self.get_logger().info("Localisation manuelle activée (publie map->odom)")
         
-        # Charger la carte depuis le fichier
         map_yaml_path = self.get_parameter("map_yaml_path").value
         if map_yaml_path:
             self.load_map_from_file(map_yaml_path)
@@ -123,6 +137,25 @@ class AStarPlannerWithSavedMap(Node):
         
         self.get_logger().info("="*60)
 
+    def publish_map_to_odom_tf(self):
+        """Publier la transformation map->odom"""
+        t = TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = self.get_parameter("global_frame").value  
+        t.child_frame_id = self.get_parameter("odom_frame").value     
+        
+        t.transform.translation.x = self.map_to_odom_x
+        t.transform.translation.y = self.map_to_odom_y
+        t.transform.translation.z = 0.0
+        
+        q = quat_from_yaw(self.map_to_odom_yaw)
+        t.transform.rotation.x = q['x']
+        t.transform.rotation.y = q['y']
+        t.transform.rotation.z = q['z']
+        t.transform.rotation.w = q['w']
+        
+        self.tf_broadcaster.sendTransform(t)
+
     def load_map_from_file(self, yaml_path):
         try:
             self.get_logger().info(f"Loading map from: {yaml_path}")
@@ -131,28 +164,23 @@ class AStarPlannerWithSavedMap(Node):
                 map_metadata = yaml.safe_load(f)
             
             resolution = map_metadata['resolution']
-            origin = map_metadata['origin']  # [x, y, theta]
+            origin = map_metadata['origin']  
             negate = map_metadata.get('negate', 0)
             occupied_thresh = map_metadata.get('occupied_thresh', 0.65)
             free_thresh = map_metadata.get('free_thresh', 0.196)
             
             image_path = map_metadata['image']
             if not image_path.startswith('/'):
-                import os
                 map_dir = os.path.dirname(yaml_path)
                 image_path = os.path.join(map_dir, image_path)
             
             self.get_logger().info(f"Loading image: {image_path}")
             
-            # Charger l'image PGM
             img = Image.open(image_path)
             img_array = np.array(img)
             
-            # Convertir en format OccupancyGrid
-            # Les valeurs PGM: 254=free, 0=occupied, 205=unknown
             height, width = img_array.shape
             
-            # Créer le message OccupancyGrid
             self.map_msg = OccupancyGrid()
             self.map_msg.header.frame_id = self.get_parameter("global_frame").value
             self.map_msg.header.stamp = self.get_clock().now().to_msg()
@@ -165,9 +193,8 @@ class AStarPlannerWithSavedMap(Node):
             self.map_msg.info.origin.position.z = 0.0
             self.map_msg.info.origin.orientation.w = 1.0
             
-            # Convertir les pixels en valeurs d'occupation
             data = []
-            for row in reversed(img_array):  # ROS utilise row-major bottom-left origin
+            for row in reversed(img_array):  
                 for pixel in row:
                     if pixel == 254:  # Free
                         data.append(0)
@@ -188,7 +215,6 @@ class AStarPlannerWithSavedMap(Node):
             
             self.map_msg.data = data
             
-            # Convertir en array 2D pour le planning
             self.occ_2d = occgrid_to_2d(data, width, height)
             
             # Inflater les obstacles
@@ -204,53 +230,105 @@ class AStarPlannerWithSavedMap(Node):
             self.get_logger().info(f"   Resolution: {resolution} m/pixel")
             self.get_logger().info(f"   Origin: ({origin[0]:.2f}, {origin[1]:.2f})")
             
-            # Si on a déjà un goal, replanifier
             if self.goal_world is not None:
                 self.try_plan()
                 
         except Exception as e:
             self.get_logger().error(f"Failed to load map: {e}")
-            self.get_logger().info("Make sure the YAML and PGM files exist and are readable")
 
     def publish_loaded_map(self):
-        """Publier la carte chargee pour visualization dans RViz"""
         if self.map_msg is not None:
             self.map_msg.header.stamp = self.get_clock().now().to_msg()
             self.map_pub.publish(self.map_msg)
 
-    # def on_map(self, msg: OccupancyGrid):
-    #     """Callback optionnel si on veut aussi écouter le topic /map"""
-    #     self.get_logger().info(f"Received dynamic map update: {msg.info.width}x{msg.info.height}")
-    #     # On peut choisir d'ignorer ou de mettre à jour avec cette nouvelle carte
-    #     if self.get_parameter("use_topic_map").value:
-    #         self.map_msg = msg
-    #         W = msg.info.width
-    #         H = msg.info.height
-    #         self.occ_2d = occgrid_to_2d(msg.data, W, H)
-            
-    #         res = msg.info.resolution
-    #         robot_radius = float(self.get_parameter("robot_radius_m").value)
-    #         inflation_cells = int(robot_radius / res)
-    #         occ_thresh = int(self.get_parameter("occ_thresh").value)
-            
-    #         self.inflated_2d = inflate_occupancy(self.occ_2d, inflation_cells, occ_thresh=occ_thresh)
-            
-    #         if self.goal_world is not None:
-    #             self.try_plan()
+    def on_map(self, msg: OccupancyGrid):
+        self.map_msg = msg
+        self.occ_2d = occgrid_to_2d(msg.data, msg.info.width, msg.info.height)
+        
+        res = msg.info.resolution
+        robot_radius = float(self.get_parameter("robot_radius_m").value)
+        inflation_cells = int(robot_radius / res)
+        occ_thresh = int(self.get_parameter("occ_thresh").value)
+        
+        self.inflated_2d = inflate_occupancy(self.occ_2d, inflation_cells, occ_thresh=occ_thresh)
+        
+        if self.goal_world is not None:
+            self.try_plan()
 
     def on_initialpose(self, msg: PoseWithCovarianceStamped):
-        self.start_world = (msg.pose.pose.position.x, msg.pose.pose.position.y)
-        self.get_logger().info(f"Manual start set: ({self.start_world[0]:.2f}, {self.start_world[1]:.2f})")
-        self.try_plan()
+        """
+        Callback pour /initialpose (2D Pose Estimate dans RViz)
+        Calcule et met à jour le TF map->odom
+        """
+        map_x = msg.pose.pose.position.x
+        map_y = msg.pose.pose.position.y
+        map_q = msg.pose.pose.orientation
+        map_yaw = yaw_from_quat(map_q)
+        
+        self.get_logger().info(f"Initial pose received in map: ({map_x:.2f}, {map_y:.2f}, {math.degrees(map_yaw):.1f}°)")
+        
+        odom_frame = self.get_parameter("odom_frame").value
+        base_frame = self.get_parameter("base_frame").value
+        
+        try:
+            odom_to_base = self.tf_buffer.lookup_transform(
+                odom_frame,
+                base_frame,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=1.0)
+            )
+            
+            odom_x = odom_to_base.transform.translation.x
+            odom_y = odom_to_base.transform.translation.y
+            odom_q = odom_to_base.transform.rotation
+            odom_yaw = yaw_from_quat(odom_q)
+            
+            self.get_logger().info(f"Robot pose in odom: ({odom_x:.2f}, {odom_y:.2f}, {math.degrees(odom_yaw):.1f}°)")
+            
+            # Calculer map->odom
+            # On veut que : map->odom + odom->base_link = map->base_link
+            # Donc : map->odom = map->base_link - odom->base_link
+            
+            # Pour la position :
+            # map_to_odom * odom_to_base = map_to_base
+            # En 2D avec rotation :
+            # [map_x]   [cos(θ) -sin(θ)] [odom_x]   [tx]
+            # [map_y] = [sin(θ)  cos(θ)] [odom_y] + [ty]
+            #
+            # On cherche tx, ty, θ tels que :
+            # map_to_base = Rot(map_to_odom_yaw) * odom_to_base + trans(map_to_odom_x, map_to_odom_y)
+            
+            self.map_to_odom_yaw = map_yaw - odom_yaw
+            
+            # Calcul de la translation
+            # map_x = map_to_odom_x + cos(map_to_odom_yaw) * odom_x - sin(map_to_odom_yaw) * odom_y
+            # map_y = map_to_odom_y + sin(map_to_odom_yaw) * odom_x + cos(map_to_odom_yaw) * odom_y
+            
+            cos_theta = math.cos(self.map_to_odom_yaw)
+            sin_theta = math.sin(self.map_to_odom_yaw)
+            
+            self.map_to_odom_x = map_x - (cos_theta * odom_x - sin_theta * odom_y)
+            self.map_to_odom_y = map_y - (sin_theta * odom_x + cos_theta * odom_y)
+            
+            self.map_to_odom_initialized = True
+            
+            self.get_logger().info(f"Localisation mise à jour !")
+            self.get_logger().info(f"  map->odom: ({self.map_to_odom_x:.2f}, {self.map_to_odom_y:.2f}, {math.degrees(self.map_to_odom_yaw):.1f}°)")
+            
+            self.start_world = (map_x, map_y)
+            self.try_plan()
+            
+        except Exception as e:
+            self.get_logger().error(f"Could not get odom->base_link transform: {e}")
+            self.get_logger().warn("Make sure the robot is publishing odometry!")
 
     def on_goal(self, msg: PoseStamped):
         new_goal = (msg.pose.position.x, msg.pose.position.y)
         
-        # Éviter de replanifier si c'est le même goal
         if self.goal_world is not None:
             dist = math.hypot(new_goal[0] - self.goal_world[0], 
                             new_goal[1] - self.goal_world[1])
-            if dist < 0.1:  # Même goal
+            if dist < 0.1:  
                 self.get_logger().debug("Same goal received, ignoring")
                 return
         
@@ -276,11 +354,11 @@ class AStarPlannerWithSavedMap(Node):
                 self.start_world = (x, y)
                 self.get_logger().info(f"Using current robot pose as start: ({x:.2f}, {y:.2f})")
             else:
-                self.get_logger().warn("Cannot get robot pose from TF. Waiting...")
+                self.get_logger().warn("Cannot get robot pose from TF. Use '2D Pose Estimate' first!")
                 return
         
         if self.start_world is None:
-            self.get_logger().info("Waiting for start position...")
+            self.get_logger().info("Waiting for start position... Click '2D Pose Estimate' in RViz")
             return
 
         origin_x = self.map_msg.info.origin.position.x
@@ -366,12 +444,10 @@ class AStarPlannerWithSavedMap(Node):
             return None
 
     def stop_robot(self):
-        """Send zero velocity command"""
         t = Twist()
         self.cmd_pub.publish(t)
 
     def on_control(self):
-        """Main control loop"""
         if not self.path_world:
             return
 
@@ -402,7 +478,6 @@ class AStarPlannerWithSavedMap(Node):
             wx, wy = self.path_world[self.path_idx]
             dist_to_current = math.hypot(wx - x, wy - y)
             
-            # Advance to next waypoint if within lookahead distance
             if dist_to_current < lookahead:
                 self.path_idx += 1
 
