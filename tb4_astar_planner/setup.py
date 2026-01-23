@@ -11,6 +11,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/planner.launch.py' , 'launch/astar_with_slam_rviz.launch.py',]),
         ('share/' + package_name + '/launch', ['launch/planner.launch.py' , 'launch/astar_with_saved_map_launch.py',]),
+        ('share/' + package_name + '/launch', ['launch/planner.launch.py' , 'launch/astar_real_robot_launch.py',]),
 
 
     ],
