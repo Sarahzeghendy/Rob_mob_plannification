@@ -13,7 +13,6 @@ setup(
         ('share/' + package_name + '/launch', ['launch/launch_joy.py']),
         ('share/' + package_name + '/rviz', ['rviz/turtlebot_config.rviz']),
         ('share/' + package_name + '/launch', ['launch/rviz_launch.py']),
-        ('share/' + package_name + '/launch', ['launch/inflate_map.launch.py'])
     ],
     install_requires=['setuptools'],
     zip_safe=True,

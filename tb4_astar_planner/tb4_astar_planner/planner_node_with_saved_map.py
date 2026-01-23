@@ -32,11 +32,9 @@ class AStarPlannerWithSavedMap(Node):
     def __init__(self):
         super().__init__("tb4_astar_planner_saved_map")
 
-        # Paramètres pour charger la carte
         self.declare_parameter("map_yaml_path", "")  # Chemin vers le fichier .yaml de la carte
-        self.declare_parameter("use_topic_map", False)  # Si True, utilise aussi le topic /map
+        self.declare_parameter("use_topic_map", False)  
         
-        # Paramètres existants
         self.declare_parameter("map_topic", "/map")
         self.declare_parameter("initialpose_topic", "/initialpose")
         self.declare_parameter("goal_topic", "/goal_pose")
@@ -60,7 +58,6 @@ class AStarPlannerWithSavedMap(Node):
         self.declare_parameter("yaw_kp", 1.8)
         self.declare_parameter("goal_tolerance_m", 0.12)
 
-        # Publishers
         self.path_pub = self.create_publisher(Path, self.get_parameter("path_topic").value, 10)
         self.cmd_pub = self.create_publisher(Twist, self.get_parameter("cmd_vel_topic").value, 10)
         
@@ -130,21 +127,17 @@ class AStarPlannerWithSavedMap(Node):
         try:
             self.get_logger().info(f"Loading map from: {yaml_path}")
             
-            # Lire le fichier YAML
             with open(yaml_path, 'r') as f:
                 map_metadata = yaml.safe_load(f)
             
-            # Extraire les paramètres
             resolution = map_metadata['resolution']
             origin = map_metadata['origin']  # [x, y, theta]
             negate = map_metadata.get('negate', 0)
             occupied_thresh = map_metadata.get('occupied_thresh', 0.65)
             free_thresh = map_metadata.get('free_thresh', 0.196)
             
-            # Construire le chemin de l'image
             image_path = map_metadata['image']
             if not image_path.startswith('/'):
-                # Chemin relatif
                 import os
                 map_dir = os.path.dirname(yaml_path)
                 image_path = os.path.join(map_dir, image_path)
@@ -220,30 +213,30 @@ class AStarPlannerWithSavedMap(Node):
             self.get_logger().info("Make sure the YAML and PGM files exist and are readable")
 
     def publish_loaded_map(self):
-        """Publier la carte chargée pour visualization dans RViz"""
+        """Publier la carte chargee pour visualization dans RViz"""
         if self.map_msg is not None:
             self.map_msg.header.stamp = self.get_clock().now().to_msg()
             self.map_pub.publish(self.map_msg)
 
-    def on_map(self, msg: OccupancyGrid):
-        """Callback optionnel si on veut aussi écouter le topic /map"""
-        self.get_logger().info(f"Received dynamic map update: {msg.info.width}x{msg.info.height}")
-        # On peut choisir d'ignorer ou de mettre à jour avec cette nouvelle carte
-        if self.get_parameter("use_topic_map").value:
-            self.map_msg = msg
-            W = msg.info.width
-            H = msg.info.height
-            self.occ_2d = occgrid_to_2d(msg.data, W, H)
+    # def on_map(self, msg: OccupancyGrid):
+    #     """Callback optionnel si on veut aussi écouter le topic /map"""
+    #     self.get_logger().info(f"Received dynamic map update: {msg.info.width}x{msg.info.height}")
+    #     # On peut choisir d'ignorer ou de mettre à jour avec cette nouvelle carte
+    #     if self.get_parameter("use_topic_map").value:
+    #         self.map_msg = msg
+    #         W = msg.info.width
+    #         H = msg.info.height
+    #         self.occ_2d = occgrid_to_2d(msg.data, W, H)
             
-            res = msg.info.resolution
-            robot_radius = float(self.get_parameter("robot_radius_m").value)
-            inflation_cells = int(robot_radius / res)
-            occ_thresh = int(self.get_parameter("occ_thresh").value)
+    #         res = msg.info.resolution
+    #         robot_radius = float(self.get_parameter("robot_radius_m").value)
+    #         inflation_cells = int(robot_radius / res)
+    #         occ_thresh = int(self.get_parameter("occ_thresh").value)
             
-            self.inflated_2d = inflate_occupancy(self.occ_2d, inflation_cells, occ_thresh=occ_thresh)
+    #         self.inflated_2d = inflate_occupancy(self.occ_2d, inflation_cells, occ_thresh=occ_thresh)
             
-            if self.goal_world is not None:
-                self.try_plan()
+    #         if self.goal_world is not None:
+    #             self.try_plan()
 
     def on_initialpose(self, msg: PoseWithCovarianceStamped):
         self.start_world = (msg.pose.pose.position.x, msg.pose.pose.position.y)
@@ -253,11 +246,11 @@ class AStarPlannerWithSavedMap(Node):
     def on_goal(self, msg: PoseStamped):
         new_goal = (msg.pose.position.x, msg.pose.position.y)
         
-        # ✅ Éviter de replanifier si c'est le même goal
+        # Éviter de replanifier si c'est le même goal
         if self.goal_world is not None:
             dist = math.hypot(new_goal[0] - self.goal_world[0], 
                             new_goal[1] - self.goal_world[1])
-            if dist < 0.1:  # Même goal (tolérance 10cm)
+            if dist < 0.1:  # Même goal
                 self.get_logger().debug("Same goal received, ignoring")
                 return
         
@@ -275,7 +268,6 @@ class AStarPlannerWithSavedMap(Node):
             self.get_logger().info("Waiting for goal...")
             return
 
-        # Auto-use robot pose if enabled
         auto_use = bool(self.get_parameter("auto_use_robot_pose").value)
         if auto_use and self.start_world is None:
             pose = self.get_robot_pose()
@@ -406,16 +398,16 @@ class AStarPlannerWithSavedMap(Node):
         lookahead = float(self.get_parameter("lookahead_m").value)
 
         # Advance path index
-        while self.path_idx < len(self.path_world) - 1:
+        if self.path_idx < len(self.path_world) - 1:
             wx, wy = self.path_world[self.path_idx]
-            if math.hypot(wx - x, wy - y) < lookahead * 0.6:
+            dist_to_current = math.hypot(wx - x, wy - y)
+            
+            # Advance to next waypoint if within lookahead distance
+            if dist_to_current < lookahead:
                 self.path_idx += 1
-            else:
-                break
 
         tx, ty = self.path_world[self.path_idx]
 
-        # Heading control
         angle_to_target = math.atan2(ty - y, tx - x)
         ang_err = self.wrap_to_pi(angle_to_target - yaw)
 

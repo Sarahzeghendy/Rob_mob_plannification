@@ -15,11 +15,9 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_yaml_file = LaunchConfiguration("map_yaml_file")
 
-    # Package directories
     tb3_gazebo_pkg = get_package_share_directory("turtlebot3_gazebo")
     tb4_planner_pkg = get_package_share_directory("tb4_astar_planner")
     
-    # Chercher la config RViz
     rviz_config_file = ""
     possible_rviz = [
         os.path.join(get_package_share_directory("my_teleop_joy"), "rviz", "turtlebot_config.rviz"),
@@ -39,7 +37,7 @@ def generate_launch_description():
         
         DeclareLaunchArgument(
             "map_yaml_file",
-            default_value="",
+            default_value="/home/evinia/robmob_ws/src/Rob_mob_plannification/tb4_astar_planner/map/test_map1.yaml",
             description="Full path to map YAML file"
         ),
 
@@ -57,7 +55,7 @@ def generate_launch_description():
             parameters=[{
                 "use_sim_time": use_sim_time,
                 "map_yaml_file": map_yaml_file,
-                "publish_rate": 1.0,  # Publier à 1Hz
+                "publish_rate": 1.0, 
             }]
         ),
 
@@ -71,31 +69,28 @@ def generate_launch_description():
 
         Node(
             package="tb4_astar_planner",
-            executable="planner_node",
+            executable="planner_node_with_saved_map",
             name="tb4_astar_planner",
             output="screen",
             parameters=[{
                 "use_sim_time": use_sim_time,
+                "map_yaml_path": map_yaml_file,
 
-                # Topics
                 "map_topic": "/map",
                 "initialpose_topic": "/initialpose",
                 "goal_topic": "/goal_pose",
                 "path_topic": "/astar_path",
                 "cmd_vel_topic": "/cmd_vel",
 
-                # Frames
                 "global_frame": "map",
                 "base_frame": "base_footprint",
 
-                # Planning parameters
                 "robot_radius_m": 0.20,
                 "occ_thresh": 50,
                 "allow_diag": True,
                 "unknown_is_free": False,
                 "auto_use_robot_pose": True,
 
-                # Control parameters
                 "lookahead_m": 0.30,
                 "v_max": 0.20,
                 "w_max": 1.2,
