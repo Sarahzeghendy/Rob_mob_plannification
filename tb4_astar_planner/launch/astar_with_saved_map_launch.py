@@ -52,7 +52,7 @@ def generate_launch_description():
             parameters=[{
                 "use_sim_time": use_sim_time,
                 "map_yaml_file": map_yaml_file,
-                "publish_rate": 1.0,  # Publier à 1Hz
+                "publish_rate": 1.0,  
             }]
         ),
 
@@ -105,4 +105,4 @@ def generate_launch_description():
             parameters=[{"use_sim_time": use_sim_time}],
             output="screen",
         ),
-    ])
+    ]) 
