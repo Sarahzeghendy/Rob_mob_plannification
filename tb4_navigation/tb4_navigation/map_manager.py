@@ -62,7 +62,7 @@ class MapManager(Node):
             
             resolution = map_metadata['resolution']
             origin = map_metadata['origin']
-            negate = map_metadata.get('negate', 0)
+            # negate = map_metadata.get('negate', 0)
             occupied_thresh = map_metadata.get('occupied_thresh', 0.65)
             free_thresh = map_metadata.get('free_thresh', 0.196)
             
@@ -76,8 +76,8 @@ class MapManager(Node):
             img = Image.open(image_path)
             img_array = np.array(img)
             
-            if negate:
-                img_array = 255 - img_array
+            # if negate:
+            #     img_array = 255 - img_array
             
             height, width = img_array.shape
             
@@ -116,7 +116,7 @@ class MapManager(Node):
             
             map_msg.data = data
             
-            self.get_logger().info('✓ Map loaded successfully!')
+            self.get_logger().info('Map loaded successfully!')
             
             return map_msg
             

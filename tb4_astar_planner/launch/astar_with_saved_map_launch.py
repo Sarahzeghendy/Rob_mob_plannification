@@ -34,7 +34,7 @@ def generate_launch_description():
         
         DeclareLaunchArgument(
             "map_yaml_file",
-            default_value="/home/sarah/robmob_ws/src/tb4_astar_planner/map/test_map1.yaml",
+            default_value="/home/evinia/robmob_ws/src/Rob_mob_plannification/tb4_astar_planner/map/test_map1.yaml",
             description="Full path to map YAML file"
         ),
 
@@ -79,7 +79,6 @@ def generate_launch_description():
                 "path_topic": "/astar_path",
                 "cmd_vel_topic": "/cmd_vel",
 
-                
                 "global_frame": "map",
                 "base_frame": "base_footprint",
 

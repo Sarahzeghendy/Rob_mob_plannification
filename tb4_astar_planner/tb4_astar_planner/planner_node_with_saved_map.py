@@ -71,7 +71,6 @@ class AStarPlannerWithSavedMap(Node):
         self.declare_parameter("yaw_kp", 1.8)
         self.declare_parameter("goal_tolerance_m", 0.12)
 
-        # Publishers
         self.path_pub = self.create_publisher(Path, self.get_parameter("path_topic").value, 10)
         self.cmd_pub = self.create_publisher(Twist, self.get_parameter("cmd_vel_topic").value, 10)
         
@@ -484,7 +483,6 @@ class AStarPlannerWithSavedMap(Node):
 
         tx, ty = self.path_world[self.path_idx]
 
-        # Heading control
         angle_to_target = math.atan2(ty - y, tx - x)
         ang_err = self.wrap_to_pi(angle_to_target - yaw)
 
