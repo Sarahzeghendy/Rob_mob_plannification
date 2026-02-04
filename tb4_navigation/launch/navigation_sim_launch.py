@@ -23,7 +23,7 @@ def generate_launch_description():
         
         DeclareLaunchArgument(
             "map_yaml_file",
-            default_value="/home/sarah/robmob_ws/src/tb4_astar_planner/map/test_map1.yaml",
+            default_value="/home/sarah/robmob_ws/src/tb4_navigation/map/my_map.yaml",
             description="Path to map YAML file"
         ),
 
@@ -59,6 +59,9 @@ def generate_launch_description():
                 "lookahead_distance": 0.35,
                 "max_linear_vel": 0.12,
                 "max_angular_vel": 0.6,
+                "yaw_tolerance": 0.12,
+                "final_yaw_gain": 2.2,
+
                 "yaw_gain": 1.5,
                 "goal_tolerance": 0.15,  
                 "control_frequency": 20.0,
@@ -79,13 +82,28 @@ def generate_launch_description():
                 "max_replan_attempts": 3,
                 "auto_use_robot_pose": True,
                 
-                "robot_radius_m": 0.20,
+                "robot_radius_m": 0.25,
                 "occ_thresh": 50,
-                "allow_diagonal": True,
+                "allow_diag": True,
                 "unknown_is_free": False,
-                "inflation_radius_m": 0.25,
+                "inflation_radius_m": 0.8,
             }]
         ),
+
+        Node(
+            package='tb4_navigation',
+            executable='trip_handler',
+            name='trip_handler',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'return_to_start_enabled': True,
+                'wait_before_return_s': 20.0,
+                'global_frame': 'map',
+                'base_frame': 'base_footprint',  
+            }]
+        ),
+
 
         Node(
             package="tb4_navigation",

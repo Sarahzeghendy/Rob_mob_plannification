@@ -76,6 +76,20 @@ def generate_launch_description():
         ),
 
         Node(
+            package='tb4_navigation',
+            executable='trip_handler',
+            name='trip_handler',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'return_to_start_enabled': True,
+                'wait_before_return_s': 20.0,
+                'global_frame': 'map',
+                'base_frame': 'base_footprint',  
+            }]
+        ),
+
+        Node(
             package="tb4_navigation",
             executable="goal_input",
             name="goal_input",

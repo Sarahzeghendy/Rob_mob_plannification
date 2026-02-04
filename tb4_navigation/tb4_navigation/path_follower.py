@@ -48,6 +48,11 @@ class PathFollower(Node):
         
         self.declare_parameter('global_frame', 'map')
         self.declare_parameter('base_frame', 'base_link')
+
+        self.declare_parameter('yaw_tolerance', 0.15)   
+        self.declare_parameter('final_yaw_gain', 2.0)
+        self.goal_yaw = None  
+
         
         self.path_sub = self.create_subscription(
             Path,
@@ -101,6 +106,10 @@ class PathFollower(Node):
         
         self.path_index = 0
         self.state = self.FOLLOWING
+
+        last_q = msg.poses[-1].pose.orientation
+        self.goal_yaw = yaw_from_quaternion(last_q)
+
         
         self.get_logger().info(f"✓ New path received: {len(self.current_path)} waypoints")
         self.publish_status(self.FOLLOWING)
@@ -129,15 +138,35 @@ class PathFollower(Node):
         dist_to_goal = math.hypot(gx - x, gy - y)
         
         if dist_to_goal < goal_tol:
+            yaw_tol = float(self.get_parameter('yaw_tolerance').value)
+
+            if self.goal_yaw is not None:
+                yaw_err = wrap_angle(self.goal_yaw - yaw)
+
+                if abs(yaw_err) > yaw_tol:
+                    kp = float(self.get_parameter('final_yaw_gain').value)
+                    w = kp * yaw_err
+
+                    w_max = float(self.get_parameter('max_angular_vel').value)
+                    w = max(-w_max, min(w_max, w))
+
+                    cmd = Twist()
+                    cmd.linear.x = 0.0
+                    cmd.angular.z = float(w)
+                    self.cmd_pub.publish(cmd)
+                    return
+
             self.stop_robot()
-            self.get_logger().info(f"Goal reached! Distance: {dist_to_goal:.3f}m")
-            
+            self.get_logger().info(f"Goal reached (XY + yaw)! Distance: {dist_to_goal:.3f}m")
+
             self.state = self.GOAL_REACHED
             self.publish_status(self.GOAL_REACHED)
-            
+
             self.current_path = []
             self.path_index = 0
+            self.goal_yaw = None
             return
+
         
         lookahead = float(self.get_parameter('lookahead_distance').value)
         

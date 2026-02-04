@@ -79,37 +79,17 @@ class NavigationController(Node):
         self.path_pub = self.create_publisher(Path, '/path', 10)
         self.state_pub = self.create_publisher(String, '~/state', 10)
         
-        self.goal_sub = self.create_subscription(
-            PoseStamped,
-            '/goal_pose',
-            self.on_goal,  
-            10
-        )
+        self.goal_sub = self.create_subscription(PoseStamped, '/nav_goal', self.on_goal, 10)
         
-        self.init_sub = self.create_subscription(
-            PoseWithCovarianceStamped,
-            '/initialpose',
-            self.on_initialpose,
-            10
-        )
+        self.init_sub = self.create_subscription(PoseWithCovarianceStamped, '/initialpose', self.on_initialpose, 10)
         
-        self.follower_status_sub = self.create_subscription(
-            String,
-            '/path_follower/status',
-            self.on_follower_status,
-            10
-        )
+        self.follower_status_sub = self.create_subscription(String, '/path_follower/status', self.on_follower_status, 10)
+
+        self.inflated_map_pub = self.create_publisher(OccupancyGrid, '/inflated_map', 1 )
+
         
-        map_qos = QoSProfile(
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
-        )
-        self.map_sub = self.create_subscription(
-            OccupancyGrid,
-            '/map',
-            self.on_map,  
-            map_qos
-        )
+        map_qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.on_map, map_qos)
         
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -120,6 +100,8 @@ class NavigationController(Node):
         
         self.start_world = None
         self.goal_world = None
+
+        self.goal_yaw = None 
         
         self.state = self.IDLE
         
@@ -200,6 +182,28 @@ class NavigationController(Node):
         except Exception as e:
             self.get_logger().error(f"Could not get odom->base_link transform: {e}")
             self.get_logger().warn("Make sure the robot is publishing odometry!")
+
+    def publish_inflated_map(self):
+        if self.map_msg is None or self.inflated_2d is None:
+            return
+
+        inflated_msg = OccupancyGrid()
+        inflated_msg.header = self.map_msg.header
+        inflated_msg.info = self.map_msg.info
+
+        data = []
+        h, w = self.inflated_2d.shape
+        for r in range(h):
+            for c in range(w):
+                v = self.inflated_2d[r, c]
+                if v < 0:
+                    data.append(-1)
+                else:
+                    data.append(int(v))
+
+        inflated_msg.data = data
+        self.inflated_map_pub.publish(inflated_msg)
+
     
     def on_map(self, msg: OccupancyGrid):
 
@@ -217,6 +221,8 @@ class NavigationController(Node):
             inflation_cells,
             occ_thresh=occ_thresh
         )
+
+        self.publish_inflated_map()
         
         if not hasattr(self, '_map_received'):
             self._map_received = True
@@ -229,23 +235,25 @@ class NavigationController(Node):
             self.try_plan()
 
     def on_goal(self, msg: PoseStamped):
-
         new_goal = (msg.pose.position.x, msg.pose.position.y)
-        
+
         if self.goal_world is not None:
-            dist = math.hypot(
-                new_goal[0] - self.goal_world[0],
-                new_goal[1] - self.goal_world[1]
-            )
-            if dist < 0.1:  
+            dist = math.hypot(new_goal[0] - self.goal_world[0],
+                            new_goal[1] - self.goal_world[1])
+            if dist < 0.1:
                 self.get_logger().debug("Same goal received, ignoring")
                 return
-        
+
         self.goal_world = new_goal
+
+        self.goal_yaw = yaw_from_quat(msg.pose.orientation)
+
         self.get_logger().info(
-            f"Goal received: ({self.goal_world[0]:.2f}, {self.goal_world[1]:.2f})"
+            f"Goal received: ({self.goal_world[0]:.2f}, {self.goal_world[1]:.2f}) "
+            f"yaw={math.degrees(self.goal_yaw):.1f}°"
         )
         self.try_plan()
+
     
     def try_plan(self):
 
@@ -257,7 +265,6 @@ class NavigationController(Node):
             self.get_logger().info("Waiting for goal...")
             return
         
-        # Auto-use robot pose if enabled
         auto_use = bool(self.get_parameter("auto_use_robot_pose").value)
         if auto_use and self.start_world is None:
             pose = self.get_robot_pose()
@@ -331,21 +338,32 @@ class NavigationController(Node):
 
         if self.map_msg is None:
             return
-        
+
         path_msg = Path()
         path_msg.header.frame_id = self.get_parameter("global_frame").value
         path_msg.header.stamp = self.get_clock().now().to_msg()
-        
-        for (x, y) in path_world:
+
+        for i, (x, y) in enumerate(path_world):
             ps = PoseStamped()
             ps.header = path_msg.header
             ps.pose.position.x = float(x)
             ps.pose.position.y = float(y)
             ps.pose.position.z = 0.0
-            ps.pose.orientation.w = 1.0
+
+            if i == len(path_world) - 1 and self.goal_yaw is not None:
+                q = quat_from_yaw(self.goal_yaw)
+                ps.pose.orientation.x = q['x']
+                ps.pose.orientation.y = q['y']
+                ps.pose.orientation.z = q['z']
+                ps.pose.orientation.w = q['w']
+            else:
+                ps.pose.orientation.w = 1.0
+
             path_msg.poses.append(ps)
-        
+
         self.path_pub.publish(path_msg)
+
+
     
     def get_robot_pose(self):
 
@@ -382,6 +400,8 @@ class NavigationController(Node):
             # Reset pour prochaine navigation
             self.start_world = None
             self.goal_world = None
+            self.goal_yaw = None
+
         elif follower_status == "FAILED":
             self.get_logger().warn("Path follower failed")
             self.set_state(self.FAILED)
