@@ -79,37 +79,14 @@ class NavigationController(Node):
         self.path_pub = self.create_publisher(Path, '/path', 10)
         self.state_pub = self.create_publisher(String, '~/state', 10)
         
-        self.goal_sub = self.create_subscription(
-            PoseStamped,
-            '/goal_pose',
-            self.on_goal,  
-            10
-        )
+        self.goal_sub = self.create_subscription(PoseStamped, '/nav_goal', self.on_goal, 10)
         
-        self.init_sub = self.create_subscription(
-            PoseWithCovarianceStamped,
-            '/initialpose',
-            self.on_initialpose,
-            10
-        )
+        self.init_sub = self.create_subscription(PoseWithCovarianceStamped, '/initialpose', self.on_initialpose, 10)
         
-        self.follower_status_sub = self.create_subscription(
-            String,
-            '/path_follower/status',
-            self.on_follower_status,
-            10
-        )
+        self.follower_status_sub = self.create_subscription(String, '/path_follower/status', self.on_follower_status, 10)
         
-        map_qos = QoSProfile(
-            depth=1,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL
-        )
-        self.map_sub = self.create_subscription(
-            OccupancyGrid,
-            '/map',
-            self.on_map,  
-            map_qos
-        )
+        map_qos = QoSProfile(depth=1, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL)
+        self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.on_map, map_qos)
         
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)

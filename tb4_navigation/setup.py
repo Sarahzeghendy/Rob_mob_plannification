@@ -36,6 +36,7 @@ setup(
             'navigation_controller = tb4_navigation.navigation_controller:main',
             'exploration_manager = tb4_navigation.exploration_manager:main',
             'goal_input = tb4_navigation.goal_input:main',
+            'trip_handler = tb4_navigation.trip_handler:main',
         ],
     },
 )

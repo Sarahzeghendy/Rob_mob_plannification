@@ -23,7 +23,7 @@ def generate_launch_description():
         
         DeclareLaunchArgument(
             "map_yaml_file",
-            default_value="/home/sarah/robmob_ws/src/tb4_astar_planner/map/test_map1.yaml",
+            default_value="/home/evinia/robmob_ws/src/Rob_mob_plannification/tb4_navigation/map/my_map.yaml",
             description="Path to map YAML file"
         ),
 
@@ -79,11 +79,21 @@ def generate_launch_description():
                 "max_replan_attempts": 3,
                 "auto_use_robot_pose": True,
                 
-                "robot_radius_m": 0.20,
+                "robot_radius_m": 0.3,
                 "occ_thresh": 50,
                 "allow_diagonal": True,
                 "unknown_is_free": False,
-                "inflation_radius_m": 0.25,
+                "inflation_radius_m": 0.8,
+            }]
+        ),
+
+        Node(
+            package='tb4_navigation',
+            executable='trip_handler',
+            name='trip_handler',
+            parameters=[{
+                'return_to_start_enabled': True,
+                'global_frame': 'map'
             }]
         ),
 
